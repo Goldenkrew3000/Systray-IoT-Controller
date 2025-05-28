@@ -1,0 +1,23 @@
+{
+    "mqtt": {
+        "broker": "192.168.5.249",
+        "port": "1883",
+        "clientName": "IoTController",
+        "username": "MQTT USERNAME HERE",
+        "password": "MQTT PASSWORD HERE"
+    },
+    "devices": [
+        {
+            "mode": "openbk_light",
+            "prettyName": "Doorside",
+            "name": "doorsideLight",
+            "type": "light"
+        },
+        {
+            "mode": "openbk_light",
+            "prettyName": "Windowside",
+            "name": "windowsideLight",
+            "type": "light"
+        }
+    ]
+}
