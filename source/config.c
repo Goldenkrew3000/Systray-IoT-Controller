@@ -16,7 +16,7 @@
 
 const char* configFilename = "config.json";
 char* configPtr = NULL;
-int rc = 0;
+static int rc = 0;
 
 // Config pointers to be used globally
 char* configPtr_mqtt_broker = NULL;

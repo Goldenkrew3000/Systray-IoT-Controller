@@ -26,7 +26,7 @@ extern int deviceCount;
 extern configPtr_device_t configPtr_devices[];
 
 MQTTClient client;
-int mqtt_rc = 0;
+static int rc = 0;
 
 int mqttHandler_init() {
     printf("%s +\n", __func__);
@@ -36,14 +36,14 @@ int mqttHandler_init() {
     snprintf(MQTT_Address, 128, "tcp://%s:%s", configPtr_mqtt_broker, configPtr_mqtt_port);
 
     // Create MQTT client
-    if ((mqtt_rc = MQTTClient_create(&client, MQTT_Address, configPtr_mqtt_clientName, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
-        printf("ERROR: Could not create MQTT client (%s).\n", MQTTClient_strerror(mqtt_rc));
+    if ((rc = MQTTClient_create(&client, MQTT_Address, configPtr_mqtt_clientName, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
+        printf("ERROR: Could not create MQTT client (%s).\n", MQTTClient_strerror(rc));
         return 1;
     }
 
     // Set callbacks
-    if ((mqtt_rc = MQTTClient_setCallbacks(client, NULL, connection_lost_callback, message_arrived_callback, NULL)) != MQTTCLIENT_SUCCESS) {
-        printf("ERROR: Could not set MQTT callbacks (%s).\n", MQTTClient_strerror(mqtt_rc));
+    if ((rc = MQTTClient_setCallbacks(client, NULL, connection_lost_callback, message_arrived_callback, NULL)) != MQTTCLIENT_SUCCESS) {
+        printf("ERROR: Could not set MQTT callbacks (%s).\n", MQTTClient_strerror(rc));
         MQTTClient_destroy(&client);
         return 1;
     }
@@ -55,15 +55,15 @@ int mqttHandler_init() {
     mqtt_options.username = configPtr_mqtt_username;
     mqtt_options.password = configPtr_mqtt_password;
 
-    if ((mqtt_rc = MQTTClient_connect(client, &mqtt_options)) != MQTTCLIENT_SUCCESS) {
-        printf("ERROR: Could not connect to MQTT broker (%s).\n", MQTTClient_strerror(mqtt_rc));
+    if ((rc = MQTTClient_connect(client, &mqtt_options)) != MQTTCLIENT_SUCCESS) {
+        printf("ERROR: Could not connect to MQTT broker (%s).\n", MQTTClient_strerror(rc));
         MQTTClient_destroy(&client);
         return 1;
     }
     printf("Connected to MQTT broker.\n");
 
     // Subscribe to # (Root topic)
-    if ((mqtt_rc = MQTTClient_subscribe(client, "#", 1)) != MQTTCLIENT_SUCCESS) {
+    if ((rc = MQTTClient_subscribe(client, "#", 1)) != MQTTCLIENT_SUCCESS) {
         printf("ERROR: Could not subscribe to MQTT broker\n");
         MQTTClient_disconnect(client, 10000);
         MQTTClient_destroy(&client);
