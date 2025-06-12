@@ -8,6 +8,7 @@
 #include "mqtt.h"
 #include "config.h"
 #include "wait.h"
+#include "states.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,12 @@ extern configPtr_device_t configPtr_devices[];
 // Window signal objects
 extern atomic_int buttonCmd;
 extern atomic_int flag;
+
+extern atomic_int dispatchFlag;
+extern atomic_int dispatchType;
+extern atomic_int dispatchAction;
+extern atomic_int dispatchDevice;
+extern _Atomic uint32_t dispatchContent;
 
 MQTTClient client;
 static int rc = 0;
@@ -142,21 +149,70 @@ processMessage_cleanup:
 
 void* mqttHandler_commandDispatcher(void*) {
     while (1 == 1) {
-        while (atomic_load(&flag) == 0) {
-            waitHandler_wait(&flag);
+        while (atomic_load(&dispatchFlag) == 0) {
+            waitHandler_wait(&dispatchFlag);
         }
 
-        printf("Button: %d\n", atomic_load(&buttonCmd));
-        mqttHandler_sendCommand();
-        atomic_store(&buttonCmd, 0);
+        // Perform requested action
+        //printf("Button: %d\n", atomic_load(&buttonCmd));
+        //mqttHandler_sendCommand();
+        //atomic_store(&buttonCmd, 0);
+        
+        printf("Performing action. Device %d, Type %d, Action %d, Content: 0x%.4x\n",
+            atomic_load(&dispatchDevice), atomic_load(&dispatchType), atomic_load(&dispatchAction), atomic_load(&dispatchContent));
 
-        // Reset flag
-        atomic_store(&flag, 0);
+        if (atomic_load(&dispatchType) == FLAG_DISPATCH_TYPE_OPENBK_LIGHT) {
+            // Dispatch request is for an OpenBK Light
+            if (atomic_load(&dispatchAction) == FLAG_DISPATCH_ACTION_OPENBK_LIGHT_POWER_ON) {
+                // Turn on light
+            } else if (atomic_load(&dispatchAction) == FLAG_DISPATCH_ACTION_OPENBK_LIGHT_POWER_OFF) {
+                // Turn off light
+            } else if (atomic_load(&dispatchAction) == FLAG_DISPATCH_ACTION_OPENBK_LIGHT_BRIGHTNESS) {
+                // Brightness change
+                printf("here");
+                char* topic = NULL;
+                char* payload = NULL;
+                asprintf(topic, "cmnd/%s/%s", configPtr_devices[device].name, cmnd);
+                asprintf(payload, "%d", content);
+                //mqttHandler_sendOpenBKLightCommand(atomic_load(&dispatchDevice), "led_dimmer", atomic_load(&dispatchContent));
+            }
+        }
+        
+        // Reset atomic contents/flag
+        atomic_store(&dispatchType, 0);
+        atomic_store(&dispatchAction, 0);
+        atomic_store(&dispatchContent, 0x0);
+        atomic_store(&dispatchDevice, -1);
+        atomic_store(&dispatchFlag, 0);
     }
 }
 
-int mqttHandler_sendCommand() {
+int mqttHandler_sendOpenBKLightCommand(int device, char* cmnd, uint32_t content) {
+    // TODO Add a heap of protection against double frees etc
+    // Form command and payload
+    char* topic = NULL;
+    char* payload = NULL;
+    asprintf(topic, "cmnd/%s/%s", configPtr_devices[device].name, cmnd);
+    asprintf(payload, "%d", content);
+    printf("Topic: %s\n", topic);
+    printf("Payload: %s\n", payload);
+
+    // Send MQTT message
+    /*MQTTClient_message obj = MQTTClient_message_initializer;
+	MQTTClient_deliveryToken token;
+    obj.payload = payload;
+	obj.payloadlen = strlen(payload);
+	obj.qos = 0;
+	obj.retained = 0;
+    MQTTClient_publishMessage(client, topic, &obj, &token);
+    */
+
+    // Free objects
+    free(topic);
+    free(payload);
+
     //char* payload = "0";
+    /*
 	char* payload = NULL;
     asprintf(&payload, "%d", atomic_load(&buttonCmd)); // Allocates automatically
     MQTTClient_message plobj = MQTTClient_message_initializer;
@@ -167,4 +223,5 @@ int mqttHandler_sendCommand() {
 	plobj.retained = 0;
 	MQTTClient_publishMessage(client, "cmnd/windowsideLight/led_enableAll", &plobj, &token);
     free(payload);
+    */
 }

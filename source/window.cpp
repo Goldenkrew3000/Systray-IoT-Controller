@@ -33,6 +33,12 @@ extern configPtr_device_t configPtr_devices[];
 atomic_int buttonCmd = 0;
 atomic_int flag = 0;
 
+atomic_int dispatchFlag = 0; // Main flag to activate the MQTT dispatch function
+atomic_int dispatchType = 0; // Type of device
+atomic_int dispatchAction = 0; // Action to perform
+atomic_int dispatchDevice = -1; // Device index
+_Atomic uint32_t dispatchContent = 0x0; // Payload to send, if any
+
 static void windowHandler_glfw_error_callback(int error, const char* desc) {
     printf("GLFW Error: %d: %s\n", error, desc);
 }
@@ -182,6 +188,8 @@ void windowHandler_handleDeviceControl() {
     }
 }
 
+int brightness = 0;
+int brightnessOld = 0;
 void windowHandler_drawLightDeviceControl() {
     ImGui::BeginChild("deviceControl", ImVec2(0, 0), true);
 
@@ -189,17 +197,34 @@ void windowHandler_drawLightDeviceControl() {
     ImGui::TextColored(ImVec4(1, 0, 1, 1), "Light Device");
     ImGui::Separator();
 
-    if (ImGui::Button("Turn on light")) {
-        atomic_store(&buttonCmd, 1);
-        atomic_store(&flag, 1);
+    if (ImGui::Button("Turn lignt on")) {
+        atomic_store(&dispatchAction, 1);
+        atomic_store(&dispatchDevice, deviceList_selectedItem);
+        atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&flag);
     }
 
-    if (ImGui::Button("Turn off light")) {
-        atomic_store(&buttonCmd, 0);
-        atomic_store(&flag, 1);
+    if (ImGui::Button("Turn light off")) {
+        atomic_store(&dispatchAction, 2);
+        atomic_store(&dispatchDevice, deviceList_selectedItem);
+        atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&flag);
     }
+
+    ImGui::SliderInt("int", &brightness, 0, 100);
+    if (brightness != brightnessOld) {
+        brightnessOld = brightness;
+        printf("Brightness slider changed: %d\n", brightness);
+
+        atomic_store(&dispatchType, 1);
+        atomic_store(&dispatchAction, 3);
+        atomic_store(&dispatchContent, brightness);
+        atomic_store(&dispatchDevice, deviceList_selectedItem);
+        atomic_store(&dispatchFlag, 1);
+        waitHandler_wake(&flag);
+    }
+    
+
 
     ImGui::EndChild();
 }
