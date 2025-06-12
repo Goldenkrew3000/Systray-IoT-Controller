@@ -28,6 +28,7 @@ set(SOURCE_FILES    "main.c"
                     "config.c"
                     "mqtt.c"
                     "window.cpp"
+                    "wait.c"
 
                     "imgui/imgui.cpp"
                     "imgui/imgui_draw.cpp"
