@@ -7,10 +7,12 @@
 
 #include "mqtt.h"
 #include "config.h"
+#include "wait.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdatomic.h>
 #include <MQTTClient.h>
 
 // MQTT Settings
@@ -24,6 +26,10 @@ char MQTT_Address[128];
 // Devices
 extern int deviceCount;
 extern configPtr_device_t configPtr_devices[];
+
+// Window signal objects
+extern atomic_int buttonCmd;
+extern atomic_int flag;
 
 MQTTClient client;
 static int rc = 0;
@@ -132,4 +138,33 @@ int mqttHandler_processMessage(char* topic, char* content) {
 processMessage_cleanup:
     free(topic);
     free(content);
+}
+
+void* mqttHandler_commandDispatcher(void*) {
+    while (1 == 1) {
+        while (atomic_load(&flag) == 0) {
+            waitHandler_wait(&flag);
+        }
+
+        printf("Button: %d\n", atomic_load(&buttonCmd));
+        mqttHandler_sendCommand();
+        atomic_store(&buttonCmd, 0);
+
+        // Reset flag
+        atomic_store(&flag, 0);
+    }
+}
+
+int mqttHandler_sendCommand() {
+    //char* payload = "0";
+	char* payload = NULL;
+    asprintf(&payload, "%d", atomic_load(&buttonCmd)); // Allocates automatically
+    MQTTClient_message plobj = MQTTClient_message_initializer;
+	MQTTClient_deliveryToken token;
+	plobj.payload = payload;
+	plobj.payloadlen = strlen(payload);
+	plobj.qos = 0;
+	plobj.retained = 0;
+	MQTTClient_publishMessage(client, "cmnd/windowsideLight/led_enableAll", &plobj, &token);
+    free(payload);
 }

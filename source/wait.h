@@ -8,10 +8,10 @@
 // Linux: Futex syscalls
 
 #ifdef __DARWIN__
-#define UL_COMPARE_AND_WAIT  1
-#define ULF_NO_ERRNO       0x01000000
-#define SYS_ulock_wait     515
-#define SYS_ulock_wake     516
+#define UL_COMPARE_AND_WAIT 1
+#define ULF_NO_ERRNO        0x01000000
+#define SYS_ulock_wait      515
+#define SYS_ulock_wake      516
 
 static inline int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout) {
     return syscall(SYS_ulock_wait, operation, addr, value, timeout);

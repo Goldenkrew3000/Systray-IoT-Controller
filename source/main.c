@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include "window.hpp"
 #include "mqtt.h"
 #include "config.h"
@@ -25,7 +26,19 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    windowHandler_start();
+    // Connect to the MQTT broker
+    rc = mqttHandler_init();
+    if (rc != 0) {
+        printf("MAIN: Ran into a critical error, exiting.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Start the MQTT command dispatcher thread
+    pthread_t thr_mqtt_cmd_dispatcher;
+    pthread_create(&thr_mqtt_cmd_dispatcher, NULL, mqttHandler_commandDispatcher, NULL);
+
+    // Start the window (Has to be on the main thread)
+    windowHandler_init();
 
     exit(EXIT_SUCCESS);
 }
