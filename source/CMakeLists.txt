@@ -40,6 +40,17 @@ set(SOURCE_FILES    "main.c"
 
 add_executable(iot_controller ${SOURCE_FILES})
 
+if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
+    # Force enable ASan on macOS
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address)
+    
+    # Needed for macOS specifically
+    add_link_options(-fno-lto)
+    
+    message(STATUS "AddressSanitizer forced enabled for macOS")
+endif()
+
 target_include_directories(iot_controller PRIVATE
     ${CJSON_INCLUDE}
     ${EXTRA_INCLUDES}

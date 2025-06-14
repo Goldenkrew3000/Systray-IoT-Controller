@@ -16,6 +16,7 @@
 extern "C" {
 #include "mqtt.h"
 #include "wait.h"
+#include "states.h"
 }
 
 // Window objects
@@ -198,28 +199,30 @@ void windowHandler_drawLightDeviceControl() {
     ImGui::Separator();
 
     if (ImGui::Button("Turn lignt on")) {
-        atomic_store(&dispatchAction, 1);
+        atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
+        atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_POWER_ON);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
         atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&flag);
     }
 
     if (ImGui::Button("Turn light off")) {
-        atomic_store(&dispatchAction, 2);
+        atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
+        atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_POWER_OFF);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
         atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&flag);
     }
 
-    ImGui::SliderInt("int", &brightness, 0, 100);
+    ImGui::SliderInt("Brightness", &brightness, 0, 100);
     if (brightness != brightnessOld) {
         brightnessOld = brightness;
         printf("Brightness slider changed: %d\n", brightness);
 
-        atomic_store(&dispatchType, 1);
-        atomic_store(&dispatchAction, 3);
-        atomic_store(&dispatchContent, brightness);
+        atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
+        atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_BRIGHTNESS);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
+        atomic_store(&dispatchContent, brightness);
         atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&flag);
     }
