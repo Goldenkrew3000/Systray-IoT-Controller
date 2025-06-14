@@ -3,10 +3,27 @@
 #include <cjson/cJSON.h>
 
 typedef struct {
-    char* mode;
+    char* uptime;
+    int mqttCount;
+    int dimmer;
+    char* color;
+    char* hsbcolor;
+    char* power;
+    char* wifi_ssid;
+    char* wifi_bssid;
+    int wifi_channel;
+    char* wifi_mode;
+    int wifi_rssi;
+    int wifi_signal;
+} mqttHandler_state_t;
+
+typedef struct {
+    char* mode; // TODO
     char* prettyName;
     char* name;
-    char* type;
+    char* type; // TODO
+    int online;
+    mqttHandler_state_t deviceState;
 } configPtr_device_t;
 
 int configHandler_read();

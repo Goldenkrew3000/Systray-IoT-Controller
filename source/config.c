@@ -170,6 +170,23 @@ int configHandler_read() {
         rc = configHandler_callocSuccess(configPtr_devices[i].type);
         if (rc == 1) { goto configHandler_cleanup_fail; }
     }
+
+    // Initialize the device state variables
+    for (int i = 0; i < deviceCount; i++) {
+        configPtr_devices[i].online = 0;
+        configPtr_devices[i].deviceState.uptime = NULL;
+        configPtr_devices[i].deviceState.color = NULL;
+        configPtr_devices[i].deviceState.hsbcolor = NULL;
+        configPtr_devices[i].deviceState.power = NULL;
+        configPtr_devices[i].deviceState.wifi_ssid = NULL;
+        configPtr_devices[i].deviceState.wifi_bssid = NULL;
+        configPtr_devices[i].deviceState.wifi_mode = NULL;
+        configPtr_devices[i].deviceState.mqttCount = 0;
+        configPtr_devices[i].deviceState.dimmer = 0;
+        configPtr_devices[i].deviceState.wifi_channel = 0;
+        configPtr_devices[i].deviceState.wifi_rssi = 0;
+        configPtr_devices[i].deviceState.wifi_signal = 0;
+    }
     
     // Free objects
     goto configHandler_cleanup_success;

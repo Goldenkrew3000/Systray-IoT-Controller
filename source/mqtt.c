@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <stdatomic.h>
 #include <MQTTClient.h>
+#include <cjson/cJSON.h>
 
 // MQTT Settings
 extern char* configPtr_mqtt_broker;
@@ -29,17 +30,16 @@ extern int deviceCount;
 extern configPtr_device_t configPtr_devices[];
 
 // Window signal objects
-extern atomic_int buttonCmd;
-extern atomic_int flag;
-
 extern atomic_int dispatchFlag;
 extern atomic_int dispatchType;
 extern atomic_int dispatchAction;
 extern atomic_int dispatchDevice;
 extern _Atomic uint32_t dispatchContent;
 
+#define ARRAY_MAX_DEPTH 3
 MQTTClient client;
 static int rc = 0;
+static int json_rc = 0;
 
 int mqttHandler_init() {
     printf("%s +\n", __func__);
@@ -126,20 +126,57 @@ int mqttHandler_processMessage(char* topic, char* content) {
     // cmnd/ --> Command sent (from here or other device)
     */
 
-    // Split string so only the root exists
+    // TODO: Reform this, many memory leaks
+
+    // Split string into array, sliced by '/'
+    // TODO handle freeing etc
     char* token = NULL;
-    char* topic_cpy = topic;
-    token = strsep(&topic_cpy, "/");
-    if (token == NULL) {
-        printf("ERROR: Something went wrong with strsep.\n");
-        goto processMessage_cleanup;
+    char* array[ARRAY_MAX_DEPTH] = { NULL };
+    int split_idx = 0;
+    token = strtok(topic, "/");
+    while (token != NULL) {
+        if (split_idx == ARRAY_MAX_DEPTH) {
+            printf("OVERFLOW WARNING!!\n");
+            break;
+        }
+        array[split_idx++] = token;
+        token = strtok(NULL, "/");
     }
 
-    // Check if the message is from a defined device
+
+    // Check for general response
     for (int i = 0; i < deviceCount; i++) {
-        if (strcmp(token, configPtr_devices[i].name) == 0) {
-            printf("Device %s has sent a status update.\n", configPtr_devices[i].prettyName);
+        if (strcmp(array[0], configPtr_devices[i].name) == 0) {
+            printf("Device %s sent a general status update.\n", configPtr_devices[i].prettyName);
+            if (strcmp(array[1], "connected") == 0) {
+                // Device sent a connection status update
+                if (strcmp(content, "online") == 0) {
+                    // Device is online
+                    configPtr_devices[i].online = 1;
+                }
+            }
         }
+    }
+
+    // Check for state/status response
+    if (strcmp(array[0], "stat") == 0) {
+        // Received state/status command response
+        // Find which device sent the response
+        for (int i = 0; i < deviceCount; i++) {
+            if (strcmp(array[1], configPtr_devices[i].name) == 0) {
+                // Find whether the response is from a state or status command
+                if (strcmp(array[2], "RESULT") == 0) {
+                    // Device sent a State response
+                    printf("Device %s sent a State response.\n", configPtr_devices[i].prettyName);
+                    mqttHandler_processStateResponse(content, i);
+                } else if (strcmp(array[2], "STATUS") == 0) {
+                    // Device sent a Status response
+                    printf("Device %s sent a Status response.\n", configPtr_devices[i].prettyName);
+                    mqttHandler_processStatusResponse(content);
+                }
+            }
+        }
+        
     }
 
 processMessage_cleanup:
@@ -147,6 +184,7 @@ processMessage_cleanup:
     free(content);
 }
 
+// MQTT Command Dispatcher Thread
 void* mqttHandler_commandDispatcher(void*) {
     while (1 == 1) {
         while (atomic_load(&dispatchFlag) == 0) {
@@ -179,8 +217,8 @@ void* mqttHandler_commandDispatcher(void*) {
     }
 }
 
+// Send an OpenBK Light Command over MQTT
 int mqttHandler_sendOpenBKLightCommand(int device, char* cmnd, int useContent, uint32_t content) {
-    // TODO Add a heap of protection against double frees etc
     // Form command and payload
     char* topic = NULL;
     char* payload = NULL;
@@ -198,9 +236,130 @@ int mqttHandler_sendOpenBKLightCommand(int device, char* cmnd, int useContent, u
     }
 	obj.qos = 0;
 	obj.retained = 0;
-    MQTTClient_publishMessage(client, topic, &obj, &token);
+    MQTTClient_publishMessage(client, topic, &obj, &token); // TODO handle response?
 
     // Free objects
     if (topic != NULL) { free(topic); }
     if (payload != NULL) { free(payload); }
+}
+
+int mqttHandler_processStateResponse(char* content, int device) {
+    // Clean the deviceState struct
+    mqttHandler_cleanState(device);
+
+    // Parse JSON
+    cJSON* jobj_state = cJSON_Parse(content);
+    if (jobj_state == NULL) {
+        const char* jerr_ptr = cJSON_GetErrorPtr();
+        if (jerr_ptr != NULL) {
+            printf("ERROR: Parsing JSON returned error: (%s)\n", jerr_ptr);
+        } else {
+            printf("ERROR: Parsing JSON returned unknown error.\n");
+        }
+        goto processStateResponse_cleanup_fail;
+    }
+
+    cJSON* jobj_uptime = cJSON_GetObjectItemCaseSensitive(jobj_state, "Uptime");
+    cJSON* jobj_mqttCount = cJSON_GetObjectItemCaseSensitive(jobj_state, "MqttCount");
+    cJSON* jobj_dimmer = cJSON_GetObjectItemCaseSensitive(jobj_state, "Dimmer");
+    cJSON* jobj_color = cJSON_GetObjectItemCaseSensitive(jobj_state, "Color");
+    cJSON* jobj_hsbcolor = cJSON_GetObjectItemCaseSensitive(jobj_state, "HSBColor");
+    cJSON* jobj_channel = cJSON_GetObjectItemCaseSensitive(jobj_state, "Channel");
+    cJSON* jobj_power = cJSON_GetObjectItemCaseSensitive(jobj_state, "POWER");
+    cJSON* jobj_wifi_root = cJSON_GetObjectItemCaseSensitive(jobj_state, "Wifi");
+
+    json_rc = configHandler_checkExists(jobj_uptime, "root", "Uptime");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_mqttCount, "root", "MqttCount");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_dimmer, "root", "Dimmer");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_color, "root", "Color");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_hsbcolor, "root", "HSBColor");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_channel, "root", "Channel");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_power, "root", "POWER");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_wifi_root, "root", "Wifi");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+
+    cJSON* jobj_wifi_ssid = cJSON_GetObjectItemCaseSensitive(jobj_wifi_root, "SSId");
+    cJSON* jobj_wifi_bssid = cJSON_GetObjectItemCaseSensitive(jobj_wifi_root, "BSSId");
+    cJSON* jobj_wifi_channel = cJSON_GetObjectItemCaseSensitive(jobj_wifi_root, "Channel");
+    cJSON* jobj_wifi_mode = cJSON_GetObjectItemCaseSensitive(jobj_wifi_root, "Mode");
+    cJSON* jobj_wifi_rssi = cJSON_GetObjectItemCaseSensitive(jobj_wifi_root, "RSSI");
+    cJSON* jobj_wifi_signal = cJSON_GetObjectItemCaseSensitive(jobj_wifi_root, "Signal");
+
+    json_rc = configHandler_checkExists(jobj_wifi_ssid, "Wifi", "SSId");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_wifi_bssid, "Wifi", "BSSId");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_wifi_channel, "Wifi", "Channel");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_wifi_mode, "Wifi", "Mode");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_wifi_rssi, "Wifi", "RSSI");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    json_rc = configHandler_checkExists(jobj_wifi_signal, "Wifi", "Signal");
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+
+    configPtr_devices[device].deviceState.uptime = strdup(jobj_uptime->valuestring);
+    json_rc = configHandler_callocSuccess(configPtr_devices[device].deviceState.uptime);
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    configPtr_devices[device].deviceState.color = strdup(jobj_color->valuestring);
+    json_rc = configHandler_callocSuccess(configPtr_devices[device].deviceState.color);
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    configPtr_devices[device].deviceState.hsbcolor = strdup(jobj_hsbcolor->valuestring);
+    json_rc = configHandler_callocSuccess(configPtr_devices[device].deviceState.hsbcolor);
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    configPtr_devices[device].deviceState.power = strdup(jobj_power->valuestring);
+    json_rc = configHandler_callocSuccess(configPtr_devices[device].deviceState.power);
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    configPtr_devices[device].deviceState.wifi_ssid = strdup(jobj_wifi_ssid->valuestring);
+    json_rc = configHandler_callocSuccess(configPtr_devices[device].deviceState.wifi_ssid);
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    configPtr_devices[device].deviceState.wifi_bssid = strdup(jobj_wifi_bssid->valuestring);
+    json_rc = configHandler_callocSuccess(configPtr_devices[device].deviceState.wifi_bssid);
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+    configPtr_devices[device].deviceState.wifi_mode = strdup(jobj_wifi_mode->valuestring);
+    json_rc = configHandler_callocSuccess(configPtr_devices[device].deviceState.wifi_mode);
+    if (json_rc == 1) { goto processStateResponse_cleanup_fail; }
+
+    configPtr_devices[device].deviceState.mqttCount = jobj_mqttCount->valueint;
+    configPtr_devices[device].deviceState.dimmer = jobj_dimmer->valueint;
+    configPtr_devices[device].deviceState.wifi_channel = jobj_wifi_channel->valueint;
+    configPtr_devices[device].deviceState.wifi_rssi = jobj_wifi_rssi->valueint;
+    configPtr_devices[device].deviceState.wifi_signal = jobj_wifi_signal->valueint;
+
+    goto processStateResponse_cleanup_success;
+
+processStateResponse_cleanup_fail:
+    cJSON_Delete(jobj_state);
+    mqttHandler_cleanState(device);
+    return 1;
+processStateResponse_cleanup_success:
+    cJSON_Delete(jobj_state);
+    return 0;
+}
+
+void mqttHandler_cleanState(int device) {
+    printf("%s +\n", __func__);
+    if (configPtr_devices[device].deviceState.uptime != NULL) { free(configPtr_devices[device].deviceState.uptime); }
+    if (configPtr_devices[device].deviceState.color != NULL) { free(configPtr_devices[device].deviceState.color); }
+    if (configPtr_devices[device].deviceState.hsbcolor != NULL) { free(configPtr_devices[device].deviceState.hsbcolor); }
+    if (configPtr_devices[device].deviceState.power != NULL) { free(configPtr_devices[device].deviceState.power); }
+    if (configPtr_devices[device].deviceState.wifi_ssid != NULL) { free(configPtr_devices[device].deviceState.wifi_ssid); }
+    if (configPtr_devices[device].deviceState.wifi_bssid != NULL) { free(configPtr_devices[device].deviceState.wifi_bssid); }
+    if (configPtr_devices[device].deviceState.wifi_mode != NULL) { free(configPtr_devices[device].deviceState.wifi_mode); }
+    configPtr_devices[device].deviceState.mqttCount = 0;
+    configPtr_devices[device].deviceState.dimmer = 0;
+    configPtr_devices[device].deviceState.wifi_channel = 0;
+    configPtr_devices[device].deviceState.wifi_rssi = 0;
+    configPtr_devices[device].deviceState.wifi_signal = 0;
+}
+
+int mqttHandler_processStatusResponse(char* content) {
+    printf("\n\n\nStatus Content: %s\n\n\n", content);
 }

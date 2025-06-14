@@ -9,5 +9,8 @@ void connection_lost_callback(void* context, char* cause);
 int mqttHandler_processMessage(char* topic, char* content);
 void* mqttHandler_commandDispatcher(void*);
 int mqttHandler_sendOpenBKLightCommand(int device, char* cmnd, int useContent, uint32_t content);
+int mqttHandler_processStateResponse(char* content, int device);
+void mqttHandler_cleanState(int device);
+int mqttHandler_processStatusResponse(char* content);
 
 #endif

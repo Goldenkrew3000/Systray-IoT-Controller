@@ -31,9 +31,6 @@ extern int deviceCount;
 extern configPtr_device_t configPtr_devices[];
 
 // Signal objects
-atomic_int buttonCmd = 0;
-atomic_int flag = 0;
-
 atomic_int dispatchFlag = 0; // Main flag to activate the MQTT dispatch function
 atomic_int dispatchType = 0; // Type of device
 atomic_int dispatchAction = 0; // Action to perform
@@ -65,7 +62,7 @@ int windowHandler_init() {
 #endif
 
     // Create a window with graphical context
-    window = glfwCreateWindow(800, 600, "IoT Controller", nullptr, nullptr);
+    window = glfwCreateWindow(640, 480, "IoT Controller", nullptr, nullptr);
     if (window == nullptr) {
         return 1;
     }
@@ -163,10 +160,20 @@ void windowHandler_drawDeviceList() {
 
     // Add devices from the config file to the list
     for (int i = 0; i < deviceCount; i++) {
+        // Set color to red or green depending whether device has been seen online
+        if (configPtr_devices[i].online == 1) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 1, 0, 1));
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
+        }
+
         if (ImGui::Selectable(configPtr_devices[i].prettyName, deviceList_selectedItem == i)) {
             deviceList_selectedItem = i;
             printf("INTERFACE: (Device list) Item %d selected.\n", deviceList_selectedItem);
         }
+
+        // Reset color
+        ImGui::PopStyleColor();
 
         if (deviceList_selectedItem) {
             ImGui::SetItemDefaultFocus();
@@ -191,6 +198,8 @@ void windowHandler_handleDeviceControl() {
 
 int brightness = 0;
 int brightnessOld = 0;
+int warmth = 0;
+int warmthOld = 0;
 void windowHandler_drawLightDeviceControl() {
     ImGui::BeginChild("deviceControl", ImVec2(0, 0), true);
 
@@ -203,7 +212,7 @@ void windowHandler_drawLightDeviceControl() {
         atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_POWER_ON);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
         atomic_store(&dispatchFlag, 1);
-        waitHandler_wake(&flag);
+        waitHandler_wake(&dispatchFlag);
     }
 
     if (ImGui::Button("Turn light off")) {
@@ -211,7 +220,7 @@ void windowHandler_drawLightDeviceControl() {
         atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_POWER_OFF);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
         atomic_store(&dispatchFlag, 1);
-        waitHandler_wake(&flag);
+        waitHandler_wake(&dispatchFlag);
     }
 
     ImGui::SliderInt("Brightness", &brightness, 0, 100);
@@ -224,7 +233,20 @@ void windowHandler_drawLightDeviceControl() {
         atomic_store(&dispatchDevice, deviceList_selectedItem);
         atomic_store(&dispatchContent, brightness);
         atomic_store(&dispatchFlag, 1);
-        waitHandler_wake(&flag);
+        waitHandler_wake(&dispatchFlag);
+    }
+
+    ImGui::SliderInt("Warmth", &warmth, 0, 100);
+    if (warmth != warmthOld) {
+        warmthOld = warmth;
+        printf("Warmth slider changed: %d\n", warmth);
+
+        atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
+        atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_WARMTH);
+        atomic_store(&dispatchDevice, deviceList_selectedItem);
+        atomic_store(&dispatchContent, warmth);
+        atomic_store(&dispatchFlag, 1);
+        waitHandler_wake(&dispatchFlag);
     }
     
 
