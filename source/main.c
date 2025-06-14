@@ -32,6 +32,11 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    // Start a thread to initially request device information about all the devices specified in the config
+    // NOTE: At this point, no modification is taking place on the variables, so no mutex's needed
+    pthread_t thr_device_info;
+    pthread_create(&thr_device_info, NULL, mqttHandler_initDeviceInfo, NULL);
+
     // Start the MQTT command dispatcher thread
     pthread_t thr_mqtt_cmd_dispatcher;
     pthread_create(&thr_mqtt_cmd_dispatcher, NULL, mqttHandler_commandDispatcher, NULL);

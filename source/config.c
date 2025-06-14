@@ -174,6 +174,11 @@ int configHandler_read() {
     // Initialize the device state variables
     for (int i = 0; i < deviceCount; i++) {
         configPtr_devices[i].online = 0;
+        configPtr_devices[i].warmth = 0;
+        configPtr_devices[i].brightness = 0;
+        configPtr_devices[i].color[0] = 0;
+        configPtr_devices[i].color[1] = 0;
+        configPtr_devices[i].color[2] = 0;
         configPtr_devices[i].deviceState.uptime = NULL;
         configPtr_devices[i].deviceState.color = NULL;
         configPtr_devices[i].deviceState.hsbcolor = NULL;

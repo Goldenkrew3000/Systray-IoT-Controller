@@ -12,11 +12,11 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "window.hpp"
-#include "config.h"
 extern "C" {
 #include "mqtt.h"
 #include "wait.h"
 #include "states.h"
+#include "config.h"
 }
 
 // Window objects
@@ -25,6 +25,7 @@ int display_width = 0;
 int display_height = 0;
 ImVec4 black_color = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
 int deviceList_selectedItem = -1;
+float halfChildHeight = 0;
 
 // Devices
 extern int deviceCount;
@@ -128,7 +129,23 @@ void windowHandler_loop() {
             ImGui::Begin("IoT Controller", nullptr, windowFlags);
             windowHandler_drawDeviceList();
             ImGui::SameLine();
+
+            ImGui::BeginChild("rightSide", ImVec2(0, 0), true);
+
+            ImVec2 left_avail = ImGui::GetContentRegionAvail();
+            halfChildHeight = left_avail.x * 0.473f; // HACK: Make 2 children aligned vertically
+            
+            //ImGui::BeginChild("UpSide", ImVec2(0, half_width), true);
+            //ImGui::EndChild();
+            //ImGui::BeginChild("DownSide", ImVec2(0, half_width), true);
+            //ImGui::EndChild();
+
             windowHandler_handleDeviceControl();
+
+
+            ImGui::EndChild();
+            
+            
             ImGui::End();
         }
 
@@ -185,8 +202,12 @@ void windowHandler_drawDeviceList() {
 
 void windowHandler_handleDeviceControl() {
     if (strcmp(configPtr_devices[deviceList_selectedItem].type, "light") == 0) {
-        //
-        windowHandler_drawLightDeviceControl();
+        if (configPtr_devices[deviceList_selectedItem].online == 1) {
+            windowHandler_drawLightDeviceControl();
+            windowHandler_drawLightDeviceInfo();
+        } else {
+            windowHandler_drawDeviceOffline();
+        }
     } else if (strcmp(configPtr_devices[deviceList_selectedItem].type, "powermon") == 0) {
         // NOTE Not implemented
         printf("NOTE: Not implemented.\n");
@@ -196,24 +217,27 @@ void windowHandler_handleDeviceControl() {
     }
 }
 
-int brightness = 0;
+//int brightness = 0;
 int brightnessOld = 0;
-int warmth = 0;
+//int warmth = 0;
 int warmthOld = 0;
+//float lightColor[3] = { 0.0f, 0.0f, 0.0f };
 void windowHandler_drawLightDeviceControl() {
-    ImGui::BeginChild("deviceControl", ImVec2(0, 0), true);
+    ImGui::BeginChild("deviceControl", ImVec2(0, halfChildHeight), true);
 
     // Title
-    ImGui::TextColored(ImVec4(1, 0, 1, 1), "Light Device");
+    ImGui::TextColored(ImVec4(1, 0, 1, 1), "OpenBK Light Device");
     ImGui::Separator();
 
-    if (ImGui::Button("Turn lignt on")) {
+    if (ImGui::Button("Turn light on")) {
         atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
         atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_POWER_ON);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
         atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&dispatchFlag);
     }
+
+    ImGui::SameLine();
 
     if (ImGui::Button("Turn light off")) {
         atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
@@ -223,34 +247,42 @@ void windowHandler_drawLightDeviceControl() {
         waitHandler_wake(&dispatchFlag);
     }
 
-    ImGui::SliderInt("Brightness", &brightness, 0, 100);
-    if (brightness != brightnessOld) {
-        brightnessOld = brightness;
-        printf("Brightness slider changed: %d\n", brightness);
+    if (ImGui::Button("Set to white mode")) {
+        //
+    }
 
+    ImGui::SameLine();
+
+    if (ImGui::Button("Set to color mode")) {
+        //
+    }
+
+    ImGui::SliderInt("Brightness", &configPtr_devices[deviceList_selectedItem].brightness, 0, 100);
+    if (configPtr_devices[deviceList_selectedItem].brightness != brightnessOld) {
+        brightnessOld = configPtr_devices[deviceList_selectedItem].brightness;
         atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
         atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_BRIGHTNESS);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
-        atomic_store(&dispatchContent, brightness);
+        atomic_store(&dispatchContent, configPtr_devices[deviceList_selectedItem].brightness);
         atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&dispatchFlag);
     }
 
-    ImGui::SliderInt("Warmth", &warmth, 0, 100);
-    if (warmth != warmthOld) {
-        warmthOld = warmth;
-        printf("Warmth slider changed: %d\n", warmth);
-
+    ImGui::SliderInt("Warmth", &configPtr_devices[deviceList_selectedItem].warmth, 0, 100);
+    if (configPtr_devices[deviceList_selectedItem].warmth != warmthOld) {
+        warmthOld = configPtr_devices[deviceList_selectedItem].warmth;
         atomic_store(&dispatchType, FLAG_DISPATCH_TYPE_OPENBK_LIGHT);
         atomic_store(&dispatchAction, FLAG_DISPATCH_ACTION_OPENBK_LIGHT_WARMTH);
         atomic_store(&dispatchDevice, deviceList_selectedItem);
-        atomic_store(&dispatchContent, warmth);
+        atomic_store(&dispatchContent, configPtr_devices[deviceList_selectedItem].warmth);
         atomic_store(&dispatchFlag, 1);
         waitHandler_wake(&dispatchFlag);
     }
+
+    ImGui::PushItemWidth(100);
+    ImGui::ColorPicker3("ColorPicker", (float*)&configPtr_devices[deviceList_selectedItem].color, ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoAlpha);
+    ImGui::PopItemWidth();
     
-
-
     ImGui::EndChild();
 }
 
@@ -262,6 +294,52 @@ void windowHandler_drawSelectDevice() {
     ImGui::Separator();
 
     ImGui::Text("Please select a device");
+
+    ImGui::EndChild();
+}
+
+void windowHandler_drawDeviceOffline() {
+    ImGui::BeginChild("deviceControl", ImVec2(0, 0), true);
+
+    // Title
+    ImGui::TextColored(ImVec4(1, 0, 1, 1), "Device is offline");
+    ImGui::Separator();
+
+    ImGui::Text("The selected device is offline");
+
+    ImGui::EndChild();
+}
+
+void windowHandler_drawLightDeviceInfo() {
+    ImGui::BeginChild("deviceInfo", ImVec2(0, halfChildHeight), true);
+
+    ImGui::Text("Uptime: %s", configPtr_devices[deviceList_selectedItem].deviceState.uptime);
+    ImGui::Text("MQTT Messages: %d\n", configPtr_devices[deviceList_selectedItem].deviceState.mqttCount);
+    if (SHOW_MODE == 1) {
+        ImGui::Text("Wifi Information: %s (Channel: %d, Mode: %s)",
+        configPtr_devices[deviceList_selectedItem].deviceState.wifi_ssid,
+        configPtr_devices[deviceList_selectedItem].deviceState.wifi_channel,
+        configPtr_devices[deviceList_selectedItem].deviceState.wifi_mode);
+        ImGui::Text("Wifi BSSID: %s", configPtr_devices[deviceList_selectedItem].deviceState.wifi_bssid);
+    } else {
+        ImGui::Text("Wifi Information:");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "Redacted");
+        ImGui::SameLine();
+        ImGui::Text("(Channel: %d, Mode: %s)",
+            configPtr_devices[deviceList_selectedItem].deviceState.wifi_channel,
+            configPtr_devices[deviceList_selectedItem].deviceState.wifi_mode);
+        ImGui::Text("Wifi BSSID:");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "Redacted");
+    }
+    
+    ImGui::Text("Wifi Signal: %d%% (%d / %d)\n",
+        100 * (configPtr_devices[deviceList_selectedItem].deviceState.wifi_signal - RSSI_MIN) / (RSSI_MAX - RSSI_MIN),
+        configPtr_devices[deviceList_selectedItem].deviceState.wifi_signal,
+        configPtr_devices[deviceList_selectedItem].deviceState.wifi_rssi);
+
+    ImGui::Text("Color: %s -- HSB Color: %s -- Dimmer: %d", configPtr_devices[deviceList_selectedItem].deviceState.color, configPtr_devices[deviceList_selectedItem].deviceState.hsbcolor, configPtr_devices[deviceList_selectedItem].deviceState.dimmer);
 
     ImGui::EndChild();
 }

@@ -136,7 +136,7 @@ int mqttHandler_processMessage(char* topic, char* content) {
     token = strtok(topic, "/");
     while (token != NULL) {
         if (split_idx == ARRAY_MAX_DEPTH) {
-            printf("OVERFLOW WARNING!!\n");
+            printf("OVERFLOW WARNING!!\n"); // TODO
             break;
         }
         array[split_idx++] = token;
@@ -333,6 +333,10 @@ int mqttHandler_processStateResponse(char* content, int device) {
     configPtr_devices[device].deviceState.wifi_rssi = jobj_wifi_rssi->valueint;
     configPtr_devices[device].deviceState.wifi_signal = jobj_wifi_signal->valueint;
 
+    // Update states
+    configPtr_devices[device].brightness = configPtr_devices[device].deviceState.dimmer;
+    //configPtr_devices[device].color[0] = configPtr_devices[device].deviceState.dimmer;
+
     goto processStateResponse_cleanup_success;
 
 processStateResponse_cleanup_fail:
@@ -362,4 +366,27 @@ void mqttHandler_cleanState(int device) {
 
 int mqttHandler_processStatusResponse(char* content) {
     printf("\n\n\nStatus Content: %s\n\n\n", content);
+}
+
+// This thread's only purpose is to run once on startup, sending an MQTT request for the state of each device configured in the config
+void* mqttHandler_initDeviceInfo(void*) {
+    printf("%s +\n", __func__);
+
+    for (int i = 0; i < deviceCount; i++) {
+        // Create topic
+        char* topic = NULL;
+        asprintf(&topic, "cmnd/%s/state", configPtr_devices[i].name);
+
+        // Send MQTT message
+        MQTTClient_message obj = MQTTClient_message_initializer;
+        MQTTClient_deliveryToken token;
+        obj.qos = 0;
+        obj.retained = 0;
+        MQTTClient_publishMessage(client, topic, &obj, &token); // TODO handle response?
+
+        // Cleanup
+        if (topic != NULL) { free(topic); } else { 
+            printf("Non-critical ERROR: Something went wrong in mqttHandler_initDeviceInfo, could not allocate memory.\n");
+        }
+    }
 }

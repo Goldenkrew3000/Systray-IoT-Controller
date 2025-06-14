@@ -2,6 +2,13 @@
 #define _CONFIG_H
 #include <cjson/cJSON.h>
 
+// RSSI Min/Max for calculating Wifi signal percentage strength
+#define RSSI_MIN -90
+#define RSSI_MAX -30
+
+// Redacts sensitive information from the interface
+#define SHOW_MODE 1
+
 typedef struct {
     char* uptime;
     int mqttCount;
@@ -22,7 +29,12 @@ typedef struct {
     char* prettyName;
     char* name;
     char* type; // TODO
+    
     int online;
+    float color[3];
+    int warmth;
+    int brightness;
+
     mqttHandler_state_t deviceState;
 } configPtr_device_t;
 

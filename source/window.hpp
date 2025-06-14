@@ -13,5 +13,7 @@ void windowHandler_drawDeviceList();
 void windowHandler_handleDeviceControl();
 void windowHandler_drawLightDeviceControl();
 void windowHandler_drawSelectDevice();
+void windowHandler_drawDeviceOffline();
+void windowHandler_drawLightDeviceInfo();
 
 #endif

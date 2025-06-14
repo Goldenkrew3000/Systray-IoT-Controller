@@ -12,5 +12,6 @@ int mqttHandler_sendOpenBKLightCommand(int device, char* cmnd, int useContent, u
 int mqttHandler_processStateResponse(char* content, int device);
 void mqttHandler_cleanState(int device);
 int mqttHandler_processStatusResponse(char* content);
+void* mqttHandler_initDeviceInfo(void*);
 
 #endif
